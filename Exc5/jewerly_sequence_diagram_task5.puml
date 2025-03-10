@@ -1,0 +1,49 @@
+@startuml
+autonumber
+
+title Кеширование MES (Write-Through + Read-Through)
+
+actor user
+participant "Messages Queue" as mq
+participant "MES API" as mes_api
+participant "Cache" as cache
+participant "MES db" as mes_db
+
+== Запись (Write-Through) ==
+alt через API
+  user -> mes_api: создание или изменение заказа
+  mes_api -> cache: сохранить заказ в кеш
+  cache -> cache: обновить запись заказа в кеше
+  cache -> mes_db: записать заказ в базу данных
+  mes_db -> mes_db: обновить запись заказа в БД
+
+autonumber 1
+else через Messages Queue
+  mq -> mes_api: получить событие изменения статуса заказа
+  mes_api -> cache: записать статус заказа в кеш
+  cache -> cache: обновить запись статуса заказа в кеше
+  cache -> mes_db: обновить статус заказа в БД
+  mes_db -> mes_db: обновить запись заказа в БД
+end
+
+autonumber 1
+== Чтение списка заказов (Read-Through) ==
+user -> mes_api: запросить список заказов
+mes_api -> cache: запросить список заказов из кеша
+cache -> cache: проверить наличие заказов в кеше
+
+autonumber 3
+alt cache miss
+  cache -> mes_db: запросить список заказов из БД
+  mes_db -> mes_db: найти все нужные заказы из БД
+  mes_db -> cache: записать список заказов в кеш
+  cache -> cache: сохранить список заказов в кеше
+  cache -> mes_api: вернуть список заказов
+
+autonumber 4
+else cache hit
+  cache -> mes_api: данные найдены в кеше
+end
+mes_api -> user: отправить список заказов
+
+@enduml
